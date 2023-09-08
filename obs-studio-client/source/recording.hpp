@@ -48,5 +48,9 @@ protected:
 	void Start(const Napi::CallbackInfo &info);
 	void Stop(const Napi::CallbackInfo &info);
 	void SplitFile(const Napi::CallbackInfo &info);
+
+	Napi::Value CanPause(const Napi::CallbackInfo &info);
+	void Pause(const Napi::CallbackInfo &info);
+	Napi::Value IsPaused(const Napi::CallbackInfo &info);
 };
 }

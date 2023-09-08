@@ -5,7 +5,7 @@
     "target": "es6",
     "module": "commonjs",
     "moduleResolution": "node",
-    "isolatedModules": false,
+    "isolatedModules": true,
     "experimentalDecorators": true,
     "noImplicitAny": true,
     "noImplicitThis": true,

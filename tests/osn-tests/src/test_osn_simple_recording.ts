@@ -419,4 +419,110 @@ describe(testName, () => {
 
         osn.SimpleRecordingFactory.destroy(recording);
     });
+
+    it('Start simple recording - Pause and Resume', async () => {
+        const recording = osn.SimpleRecordingFactory.create();
+        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+        recording.format = ERecordingFormat.MP4;
+        recording.quality = ERecordingQuality.Lossless;
+        recording.video = obs.defaultVideoContext;
+        recording.lowCPU = false;
+        recording.overwrite = false;
+        recording.noSpace = false;
+        let _resolve;
+        recording.signalHandler = (signal) => {
+            obs.signals.push(signal);
+            console.log(signal);
+            if(signal.signal == EOBSOutputSignal.Wrote){
+                osn.SimpleRecordingFactory.destroy(recording);
+                _resolve();
+            }
+        };
+        
+
+        recording.start();
+
+        let signalInfo = await obs.getNextSignalInfo(
+            EOBSOutputType.Recording, EOBSOutputSignal.Start);
+
+        if (signalInfo.signal == EOBSOutputSignal.Stop) {
+            throw Error(GetErrorMessage(
+                ETestErrorMsg.RecordOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+        }
+
+        expect(signalInfo.type).to.equal(
+            EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        expect(signalInfo.signal).to.equal(
+            EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+
+        await sleep(500);
+
+        expect(recording.canPause()).to.equal(true, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        expect(recording.isPaused()).to.equal(false, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        recording.pause(true);
+
+        signalInfo = await obs.getNextSignalInfo(
+            EOBSOutputType.Recording, EOBSOutputSignal.Pause);
+
+        expect(signalInfo.type).to.equal(
+            EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        expect(signalInfo.signal).to.equal(
+            EOBSOutputSignal.Pause, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        await sleep(500);
+
+        expect(recording.isPaused()).to.equal(true, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        recording.pause(false);
+
+        signalInfo = await obs.getNextSignalInfo(
+            EOBSOutputType.Recording, EOBSOutputSignal.Resume);
+
+        expect(signalInfo.type).to.equal(
+            EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        expect(signalInfo.signal).to.equal(
+            EOBSOutputSignal.Resume, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        recording.stop();
+
+        // signalInfo = await obs.getNextSignalInfo(
+        //     EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
+        // expect(signalInfo.type).to.equal(
+        //     EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        // expect(signalInfo.signal).to.equal(
+        //     EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        // signalInfo = await obs.getNextSignalInfo(
+        //     EOBSOutputType.Recording, EOBSOutputSignal.Stop);
+
+        // if (signalInfo.code != 0) {
+        //     throw Error(GetErrorMessage(
+        //         ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
+        // }
+
+        // expect(signalInfo.type).to.equal(
+        //     EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        // expect(signalInfo.signal).to.equal(
+        //     EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        // signalInfo = await obs.getNextSignalInfo(
+        //     EOBSOutputType.Recording, EOBSOutputSignal.Wrote);
+
+        // if (signalInfo.code != 0) {
+        //     throw Error(GetErrorMessage(
+        //         ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
+        // }
+
+        // expect(signalInfo.type).to.equal(
+        //     EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        // expect(signalInfo.signal).to.equal(
+        //     EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        await new Promise((resolve)=>{
+            _resolve = resolve;
+        })
+
+    });
 });

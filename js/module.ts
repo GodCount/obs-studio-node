@@ -1717,7 +1717,10 @@ export interface IRecording extends IFileOutput {
     signalHandler: (signal: EOutputSignal) => void,
     start(): void,
     stop(force?: boolean): void,
-    splitFile(): void
+    splitFile(): void,
+    canPause(): boolean,
+    pause(pause: boolean): void,
+    isPaused(): boolean
 }
 
 export interface ISimpleRecording extends IRecording {

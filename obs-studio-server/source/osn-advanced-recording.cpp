@@ -46,6 +46,9 @@ void osn::IAdvancedRecording::Register(ipc::server &srv)
 		std::make_shared<ipc::function>("SetUseStreamEncoders", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetUseStreamEncoders));
 	cls->register_function(std::make_shared<ipc::function>("Start", std::vector<ipc::type>{ipc::type::UInt64}, Start));
 	cls->register_function(std::make_shared<ipc::function>("Stop", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, Stop));
+	cls->register_function(std::make_shared<ipc::function>("CanPause", std::vector<ipc::type>{ipc::type::UInt64}, CanPause));
+	cls->register_function(std::make_shared<ipc::function>("Pause", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, Pause));
+	cls->register_function(std::make_shared<ipc::function>("IsPaused", std::vector<ipc::type>{ipc::type::UInt64}, IsPaused));
 	cls->register_function(std::make_shared<ipc::function>("Query", std::vector<ipc::type>{ipc::type::UInt64}, Query));
 	cls->register_function(std::make_shared<ipc::function>("GetLegacySettings", std::vector<ipc::type>{}, GetLegacySettings));
 	cls->register_function(std::make_shared<ipc::function>("SetLegacySettings", std::vector<ipc::type>{ipc::type::UInt64}, SetLegacySettings));
@@ -261,6 +264,50 @@ void osn::IAdvancedRecording::Stop(void *data, const int64_t id, const std::vect
 	obs_output_stop(recording->output);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::IAdvancedRecording::CanPause(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {
+	AdvancedRecording *recording = static_cast<AdvancedRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!recording) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
+	}
+	if (!recording->output) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording output.");
+	}
+	bool result = obs_output_can_pause(recording->output);
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(result));
+	AUTO_DEBUG;
+}
+
+void osn::IAdvancedRecording::Pause(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {
+	AdvancedRecording *recording = static_cast<AdvancedRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!recording) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
+	}
+	if (!recording->output) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording output.");
+	}
+	bool result = obs_output_pause(recording->output, args[1].value_union.ui32);
+	if (!result) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Pause failed!");	
+	}
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::IAdvancedRecording::IsPaused(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {
+	AdvancedRecording *recording = static_cast<AdvancedRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!recording) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
+	}
+	if (!recording->output) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording output.");
+	}
+	bool result = obs_output_paused(recording->output);
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(result));
 	AUTO_DEBUG;
 }
 

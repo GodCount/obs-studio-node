@@ -59,6 +59,10 @@ Napi::Object osn::SimpleRecording::Init(Napi::Env env, Napi::Object exports)
 			InstanceMethod("stop", &osn::SimpleRecording::Stop),
 			InstanceMethod("splitFile", &osn::SimpleRecording::SplitFile),
 
+			InstanceMethod("canPause", &osn::SimpleRecording::CanPause),
+			InstanceMethod("pause", &osn::SimpleRecording::Pause),
+			InstanceMethod("isPaused", &osn::SimpleRecording::IsPaused),
+
 			StaticAccessor("legacySettings", &osn::SimpleRecording::GetLegacySettings, &osn::SimpleRecording::SetLegacySettings),
 			InstanceMethod("lastFile", &osn::SimpleRecording::GetLastFile),
 		});

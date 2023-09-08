@@ -56,6 +56,10 @@ Napi::Value OBS_service_startRecording(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_startReplayBuffer(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_stopStreaming(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_stopRecording(const Napi::CallbackInfo &info);
+Napi::Value OBS_service_canPauseRecording(const Napi::CallbackInfo &info);
+Napi::Value OBS_service_pauseRecording(const Napi::CallbackInfo &info);
+Napi::Value OBS_service_isPausedRecording(const Napi::CallbackInfo &info);
+
 Napi::Value OBS_service_stopReplayBuffer(const Napi::CallbackInfo &info);
 
 Napi::Value OBS_service_connectOutputSignals(const Napi::CallbackInfo &info);

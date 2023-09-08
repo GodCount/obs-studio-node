@@ -105,6 +105,46 @@ void osn::Recording::SplitFile(const Napi::CallbackInfo &info)
 	conn->call(className, "SplitFile", {ipc::value(this->uid)});
 }
 
+Napi::Value osn::Recording::CanPause(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "CanPause", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Boolean::New(info.Env(), response[1].value_union.ui32);
+}
+
+void osn::Recording::Pause(const Napi::CallbackInfo &info) {
+	bool shouldPause = true;
+	if (info.Length() == 1)
+		shouldPause = info[0].ToBoolean().Value();
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	conn->call(className, "Pause", {ipc::value(this->uid), ipc::value(shouldPause)});
+}
+
+Napi::Value osn::Recording::IsPaused(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "IsPaused", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Boolean::New(info.Env(), response[1].value_union.ui32);
+}
+
 Napi::Value osn::Recording::GetEnableFileSplit(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);

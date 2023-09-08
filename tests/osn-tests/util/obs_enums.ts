@@ -11,6 +11,8 @@ export const enum EOBSOutputSignal {
     Activate = 'activate',
     Stopping = 'stopping',
     Stop = 'stop',
+    Pause = 'pause',
+    Resume = 'unpause',
     Deactivate = 'deactivate',
     Reconnect = 'reconnect',
     ReconnectSuccess = 'reconnect_success',

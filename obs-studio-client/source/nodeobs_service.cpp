@@ -18,6 +18,7 @@
 
 #include "nodeobs_service.hpp"
 #include "controller.hpp"
+#include "napi.h"
 #include "osn-error.hpp"
 #include "utility-v8.hpp"
 
@@ -181,6 +182,47 @@ Napi::Value service::OBS_service_stopRecording(const Napi::CallbackInfo &info)
 
 	conn->call("NodeOBS_Service", "OBS_service_stopRecording", {});
 	return info.Env().Undefined();
+}
+
+Napi::Value service::OBS_service_canPauseRecording(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("NodeOBS_Service", "OBS_service_canPauseRecording", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Boolean::New(info.Env(), response.at(1).value_union.ui32);
+
+}
+
+Napi::Value service::OBS_service_pauseRecording(const Napi::CallbackInfo &info)
+{
+	bool pause = info[0].ToBoolean().Value();
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	conn->call("NodeOBS_Service", "OBS_service_pauseRecording", {ipc::value(pause)});
+	return info.Env().Undefined();
+}
+
+Napi::Value service::OBS_service_isPausedRecording(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("NodeOBS_Service", "OBS_service_isPausedRecording", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Boolean::New(info.Env(), response.at(1).value_union.ui32);
 }
 
 Napi::Value service::OBS_service_stopReplayBuffer(const Napi::CallbackInfo &info)
@@ -514,6 +556,9 @@ void service::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_service_startRecording"), Napi::Function::New(env, service::OBS_service_startRecording));
 	exports.Set(Napi::String::New(env, "OBS_service_startReplayBuffer"), Napi::Function::New(env, service::OBS_service_startReplayBuffer));
 	exports.Set(Napi::String::New(env, "OBS_service_stopRecording"), Napi::Function::New(env, service::OBS_service_stopRecording));
+	exports.Set(Napi::String::New(env, "OBS_service_canPauseRecording"), Napi::Function::New(env, service::OBS_service_canPauseRecording));
+	exports.Set(Napi::String::New(env, "OBS_service_pauseRecording"), Napi::Function::New(env, service::OBS_service_pauseRecording));
+	exports.Set(Napi::String::New(env, "OBS_service_isPausedRecording"), Napi::Function::New(env, service::OBS_service_isPausedRecording));
 	exports.Set(Napi::String::New(env, "OBS_service_stopStreaming"), Napi::Function::New(env, service::OBS_service_stopStreaming));
 	exports.Set(Napi::String::New(env, "OBS_service_stopReplayBuffer"), Napi::Function::New(env, service::OBS_service_stopReplayBuffer));
 	exports.Set(Napi::String::New(env, "OBS_service_connectOutputSignals"), Napi::Function::New(env, service::OBS_service_connectOutputSignals));

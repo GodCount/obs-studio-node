@@ -549,7 +549,7 @@ export interface ISceneItem {
     streamVisible: boolean;
     recordingVisible: boolean;
     video: IVideo;
-    readonly transformInfo: ITransformInfo;
+    transformInfo: ITransformInfo;
     crop: ICropInfo;
     moveUp(): void;
     moveDown(): void;
@@ -632,7 +632,6 @@ export interface IDisplay {
     getPreviewSize(x: number, y: number): void;
     shouldDrawUI: boolean;
     paddingSize: number;
-    video: IVideo;
     setPaddingColor(r: number, g: number, b: number, a: number): void;
     setBackgroundColor(r: number, g: number, b: number, a: number): void;
     setOutlineColor(r: number, g: number, b: number, a: number): void;
@@ -844,6 +843,9 @@ export interface IRecording extends IFileOutput {
     start(): void;
     stop(force?: boolean): void;
     splitFile(): void;
+    canPause(): boolean;
+    pause(pause: boolean): void;
+    isPaused(): boolean;
 }
 export interface ISimpleRecording extends IRecording {
     quality: ERecordingQuality;

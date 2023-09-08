@@ -30,7 +30,7 @@ public:
 	Recording() : FileOutput()
 	{
 		videoEncoder = nullptr;
-		signals = {"start", "stop", "stopping", "wrote"};
+		signals = {"start", "stop", "stopping", "pause", "unpause", "wrote"};
 		enableFileSplit = false;
 		splitType = SplitFileType::TIME;
 		splitTime = 15;
