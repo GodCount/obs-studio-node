@@ -547,6 +547,32 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 #endif
 }
 
+Napi::Value service::OBS_service_screenshot(const Napi::CallbackInfo &info)
+{
+	start_worker(info.Env(), cb.Value());
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	conn->call("NodeOBS_Service", "OBS_service_screenshot", {});
+	return info.Env().Undefined();
+}
+
+Napi::Value service::OBS_service_getLastScreenshot(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("NodeOBS_Service", "OBS_service_getLastScreenshot", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::String::New(info.Env(), response.at(1).value_str);
+}
+
 void service::Init(Napi::Env env, Napi::Object exports)
 {
 	exports.Set(Napi::String::New(env, "OBS_service_resetAudioContext"), Napi::Function::New(env, service::OBS_service_resetAudioContext));
@@ -575,4 +601,6 @@ void service::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_service_uninstallVirtualCamPlugin"), Napi::Function::New(env, service::OBS_service_uninstallVirtualCamPlugin));
 	exports.Set(Napi::String::New(env, "OBS_service_isVirtualCamPluginInstalled"),
 		    Napi::Function::New(env, service::OBS_service_isVirtualCamPluginInstalled));
+	exports.Set(Napi::String::New(env, "OBS_service_screenshot"), Napi::Function::New(env, service::OBS_service_screenshot));
+	exports.Set(Napi::String::New(env, "OBS_service_getLastScreenshot"), Napi::Function::New(env, service::OBS_service_getLastScreenshot));
 }

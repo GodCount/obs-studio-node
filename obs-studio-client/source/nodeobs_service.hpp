@@ -78,4 +78,6 @@ Napi::Value OBS_service_stopVirtualWebcam(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_installVirtualCamPlugin(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_isVirtualCamPluginInstalled(const Napi::CallbackInfo &info);
+Napi::Value OBS_service_screenshot(const Napi::CallbackInfo &info);
+Napi::Value OBS_service_getLastScreenshot(const Napi::CallbackInfo &info);
 }

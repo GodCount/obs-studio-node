@@ -33,6 +33,16 @@
 #include "util-crashmanager.h"
 #endif
 
+
+
+//extern "C" {
+//#include <libavcodec/avcodec.h>
+//#include <libavformat/avformat.h>
+//#include <libavutil/imgutils.h>
+//#include <libswscale/swscale.h>
+//}
+
+
 std::vector<obs_output_t *> streamingOutput = {nullptr, nullptr};
 
 obs_output_t *recordingOutput = nullptr;
@@ -78,6 +88,9 @@ static constexpr int kSoundtrackArchiveTrackIdx = 5;
 static obs_encoder_t *streamArchiveEncST = nullptr;
 static bool twitchSoundtrackEnabled = false;
 
+OsnScreenshot *screenshot;
+std::string lastScreenshot = "";
+
 OBS_service::OBS_service() {}
 OBS_service::~OBS_service() {}
 
@@ -115,6 +128,8 @@ void OBS_service::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_removeVirtualWebcam", std::vector<ipc::type>{}, OBS_service_removeVirtualWebcam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_startVirtualWebcam", std::vector<ipc::type>{}, OBS_service_startVirtualWebcam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopVirtualWebcan", std::vector<ipc::type>{}, OBS_service_stopVirtualWebcan));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_screenshot", std::vector<ipc::type>{}, OBS_service_screenshot));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastScreenshot", std::vector<ipc::type>{}, OBS_service_getLastScreenshot));
 
 	srv.register_collection(cls);
 }
@@ -2813,6 +2828,33 @@ void OBS_service::OBS_service_stopVirtualWebcan(void *data, const int64_t id, co
 
 	obs_output_stop(virtualWebcamOutput);
 }
+
+void OBS_service::OBS_service_screenshot(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {
+	if (!!screenshot) {
+		SignalInfo signal = SignalInfo("screenshot", "fail");
+		signal.setErrorMessage("Cannot take new screenshot, screenshot currently in progress");
+		signal.setCode(OBS_OUTPUT_ERROR);
+		std::unique_lock<std::mutex> ulock(signalMutex);
+		outputSignal.push(signal);
+	}
+	else {
+		screenshot = new OsnScreenshot();
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+
+#if !defined(_WIN32)
+	util::CrashManager::UpdateBriefCrashInfoAppState();
+#endif
+
+	AUTO_DEBUG;
+}
+
+void OBS_service::OBS_service_getLastScreenshot(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(lastScreenshot));
+}
+
 void OBS_service::stopAllOutputs()
 {
 	if (isStreamingOutputActive(StreamServiceId::Main))
@@ -2992,4 +3034,330 @@ void OBS_service::setupVodTrack(bool isSimpleMode)
 			obs_output_set_audio_encoder(streamingOutput[0], streamArchiveEncVod, 1);
 		}
 	}
+}
+
+
+/******************************************************************************
+* Screenshot Output Source
+******************************************************************************/
+
+static void EnsureDirectoryExists(std::string path) {
+	replace(path.begin(), path.end(), '\\', '/');
+
+	size_t last = path.rfind('/');
+	if (last == std::string::npos)
+		return;
+
+	std::string directory = path.substr(0, last);
+	os_mkdirs(directory.c_str());
+}
+
+
+static std::string GenerateOutputPath(const char *path, 
+	const char *ext, 
+	bool noSpace, 
+	bool overwrite, 
+	const char *format) {
+
+	os_dir_t *dir = path && path[0] ? os_opendir(path) : nullptr;
+
+	if (!dir) {
+		return "";
+	}
+
+	os_closedir(dir);
+
+	std::string strPath;
+	strPath += path;
+
+	char lastChar = strPath.back();
+	if (lastChar != '/' && lastChar != '\\')
+		strPath += "/";
+
+	obs_video_info ovi;
+	obs_get_video_info(&ovi);
+	const char *filename = os_generate_formatted_filename(ext, !noSpace, format, &ovi);
+
+	strPath += filename;
+
+	EnsureDirectoryExists(strPath);
+
+	if (!overwrite) 
+		FindBestFilename(strPath, noSpace);
+
+	return strPath;
+}
+
+
+static void ScreenshotTick(void *param, float);
+
+OsnScreenshot::OsnScreenshot() {
+	obs_add_tick_callback(ScreenshotTick, this);
+}
+
+OsnScreenshot::~OsnScreenshot() {
+	
+	obs_enter_graphics();
+	gs_stagesurface_destroy(stagesurf);
+	gs_texrender_destroy(texrender);
+	obs_leave_graphics();
+
+	obs_remove_tick_callback(ScreenshotTick, this);
+
+	if (th.joinable()) {
+		th.join();
+		lastScreenshot = path;
+		SignalInfo signal;
+
+		if (success) {
+			lastScreenshot = path;
+			signal = SignalInfo("screenshot", "success");
+			signal.setCode(OBS_OUTPUT_SUCCESS);
+		} else {
+			signal = SignalInfo("screenshot", "fail");
+			signal.setErrorMessage(message_error);
+			signal.setCode(OBS_OUTPUT_ERROR);
+		}
+		std::unique_lock<std::mutex> ulock(signalMutex);
+		outputSignal.push(signal);
+	}
+}
+
+void OsnScreenshot::Screenshot() {
+	obs_video_info ovi;
+	obs_get_video_info(&ovi);
+	cx = ovi.base_width;
+	cy = ovi.base_height;
+
+
+	if (!cx || !cy) {
+		obs_remove_tick_callback(ScreenshotTick, this);
+		message_error = "No width or height!";
+		delete screenshot;
+		return;
+	}
+
+	const enum gs_color_space space = GS_CS_SRGB;
+	const enum gs_color_format format = gs_get_format_from_space(space);
+
+	texrender = gs_texrender_create(format, GS_ZS_NONE);
+	stagesurf = gs_stagesurface_create(cx, cy, format);
+
+	if (gs_texrender_begin_with_color_space(texrender, cx, cy, space)) {
+		vec4 zero;
+		vec4_zero(&zero);
+
+		gs_clear(GS_CLEAR_COLOR, &zero, 0.0f, 0);
+		gs_ortho(0.0f, (float)cx, 0.0f, (float)cy, -100.0f, 100.0f);
+
+		gs_blend_state_push();
+		gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+
+		obs_render_main_texture();
+
+		gs_blend_state_pop();
+		gs_texrender_end(texrender);
+	}
+
+}
+
+void OsnScreenshot::Download() {
+	gs_stage_texture(stagesurf, gs_texrender_get_texture(texrender));
+}
+
+void OsnScreenshot::Copy() {
+	uint8_t *videoData = nullptr;
+	uint32_t videoLinesize = 0;
+
+	if (gs_stagesurface_map(stagesurf, &videoData, &videoLinesize)) {
+		linesize = videoLinesize;
+		data = (uint8_t *) bzalloc((cx + 32) * cy * 4);
+		memcpy(data, videoData, videoLinesize * cy);
+		gs_stagesurface_unmap(stagesurf);
+	}
+}
+
+
+
+void OsnScreenshot::Save() {
+//	config_t *config = ConfigManager::getInstance().getBasic();
+//	const char *mode = config_get_string(config, "Output", "Mode");
+//	const char *adv_path = config_get_string(config, "AdvOut", "RecFilePath");
+//	const char *rec_path = strcmp(mode, "Advanced") 
+//		? config_get_string(config, "SimpleOutput", "FilePath") : adv_path;
+//	bool noSpace = config_get_bool(config, "SimpleOutput", "FileNameWithoutSpace");
+//std:
+//	const char *filenameFormat = config_get_string(config, "Output", "FilenameFormatting");
+//	bool overwriteIfExists = config_get_bool(config, "Output", "OverwriteIfExists");
+//	const char *ext = "raw";
+//
+//	path = GenerateOutputPath(rec_path, ext, noSpace, overwriteIfExists, filenameFormat);
+
+
+	char tmp[L_tmpnam];
+	std::tmpnam(tmp);
+
+	path = tmp;
+
+	th = std::thread([this] { MuxAndFinish(); });
+	delete screenshot;
+}
+
+void OsnScreenshot::MuxAndFinish() {
+
+
+	FILE *of = fopen(path.c_str(), "wb");
+	if (of != NULL) {
+		fwrite(data, 1, linesize * cy, of);
+		fclose(of);
+		success = true;
+		return;
+	}
+
+
+	//const char *destination = path.c_str();
+	//uint8_t *image_data_ptr = data;
+	//uint32_t image_data_linesize = linesize;
+	//uint32_t width = cx;
+	//uint32_t height = cy;
+
+//	int ret;
+//	AVFrame *frame;
+//	AVPacket pkt;
+//
+//	if (image_data_ptr == NULL)
+//		goto err_no_image_data;
+//
+//	const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_PNG);
+//	if (codec == NULL)
+//		goto err_png_codec_not_found;
+//
+//	AVCodecContext *codec_context = avcodec_alloc_context3(codec);
+//	if (codec_context == NULL)
+//		goto err_png_encoder_context_alloc;
+//
+//	codec_context->bit_rate = 400000;
+//	codec_context->width = width;
+//	codec_context->height = height;
+//	codec_context->pix_fmt = AV_PIX_FMT_RGBA;
+//	codec_context->time_base = AVRational{1, 25};
+//
+//
+//	if (avcodec_open2(codec_context, codec, NULL) != 0)
+//		goto err_png_encoder_open;
+//
+//	frame = av_frame_alloc();
+//	if (frame == NULL)
+//		goto err_av_frame_alloc;
+//
+//	frame->format = codec_context->pix_fmt;
+//	frame->width = width;
+//	frame->height = height;
+//
+//	ret = av_image_alloc(frame->data, frame->linesize, codec_context->width, codec_context->height, codec_context->pix_fmt, 4);
+//	if (ret < 0)
+//		goto err_av_image_alloc;
+//
+//	av_init_packet(&pkt);
+//	pkt.data = NULL;
+//	pkt.size = 0;
+//
+//	for (int y = 0; y < height; ++y)
+//		memcpy(frame->data[0] + y * width * 4, image_data_ptr + y * image_data_linesize, width * 4);
+//	frame->pts = 1;
+//
+//#if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(57, 40, 101)
+//	int got_output = 0;
+//	ret = avcodec_encode_video2(codec_context, &pkt, frame, &got_output);
+//	if (ret == 0 && got_output) {
+//		FILE *of = fopen(destination, "wb");
+//		if (of != NULL) {
+//			fwrite(pkt.data, 1, pkt.size, of);
+//			fclose(of);
+//			success = true;
+//		}
+//		av_free_packet(&pkt);
+//	}
+//#else
+//	ret = avcodec_send_frame(codec_context, frame);
+//	if (ret < 0)
+//		goto err_av_image_alloc;
+//	ret = avcodec_receive_packet(codec_context, &pkt);
+//	if (ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+//		goto err_av_image_alloc;
+//	} else {
+//		FILE *of = fopen(destination, "wb");
+//		if (of != NULL) {
+//			fwrite(pkt.data, 1, pkt.size, of);
+//			fclose(of);
+//			success = true;
+//		}
+//		av_packet_unref(&pkt);
+//	}
+//#endif
+//
+//	av_freep(frame->data);
+//
+//err_av_image_alloc:
+//	// Failed allocating image data buffer
+//	av_frame_free(&frame);
+//	frame = NULL;
+//	message_error = "Failed allocating image data buffer";
+//
+//err_av_frame_alloc:
+//	// Failed allocating frame
+//	avcodec_close(codec_context);
+//	message_error = "Failed allocating frame";
+//
+//err_png_encoder_open:
+//	// Failed opening PNG encoder
+//	avcodec_free_context(&codec_context);
+//	codec_context = NULL;
+//	message_error = "Failed opening PNG encoder";
+//
+//err_png_encoder_context_alloc:
+//	// failed allocating PNG encoder context
+//	// no need to free AVCodec* codec
+//	message_error = "failed allocating PNG encoder context, no need to free AVCodec* codec";
+//err_png_codec_not_found:
+//	// PNG encoder not found
+//	message_error = "NG encoder not found";
+//err_no_image_data:
+//	// image_data_ptr == NULL
+//	message_error = "image data not found";
+
+}
+
+#define STAGE_SCREENSHOT 0
+#define STAGE_DOWNLOAD 1
+#define STAGE_COPY_AND_SAVE 2
+#define STAGE_FINISH 3
+
+static void ScreenshotTick(void *param, float)
+{
+	OsnScreenshot *data = reinterpret_cast<OsnScreenshot *>(param);
+
+	if (data->stage == STAGE_FINISH) {
+		return;
+	}
+
+	obs_enter_graphics();
+
+	switch (data->stage) {
+	case STAGE_SCREENSHOT:
+		data->Screenshot();
+		break;
+	case STAGE_DOWNLOAD:
+		data->Download();
+		break;
+	case STAGE_COPY_AND_SAVE:
+		data->Copy();
+		data->Save();
+		obs_remove_tick_callback(ScreenshotTick, data);
+		break;
+	}
+
+	obs_leave_graphics();
+
+	data->stage++;
 }

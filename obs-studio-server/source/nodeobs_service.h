@@ -111,6 +111,32 @@ public:
 	StreamServiceId getIndex(void) { return m_index; };
 };
 
+
+class OsnScreenshot {
+public:
+	OsnScreenshot();
+	~OsnScreenshot();
+	void Screenshot();
+	void Download();
+	void Copy();
+	void MuxAndFinish();
+	void Save();
+
+	gs_texrender_t *texrender = nullptr;
+	gs_stagesurf_t *stagesurf = nullptr;
+	std::string path;
+	bool success = false;
+	std::string message_error;
+	uint8_t *data;
+	uint32_t linesize;
+	uint32_t cx;
+	uint32_t cy;
+	std::thread th;
+
+	int stage = 0;
+};
+
+
 class OBS_service {
 public:
 	OBS_service();
@@ -141,6 +167,9 @@ public:
 	static void OBS_service_removeVirtualWebcam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void OBS_service_startVirtualWebcam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void OBS_service_stopVirtualWebcan(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void OBS_service_screenshot(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void OBS_service_getLastScreenshot(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+
 
 private:
 	static bool startStreaming(StreamServiceId serviceId);
