@@ -743,7 +743,7 @@ export declare const enum ERecordingFormat {
     MOV = "mov",
     MKV = "mkv",
     TS = "ts",
-    M3M8 = "m3m8"
+    M3U8 = "m3u8"
 }
 export declare const enum ERecordingQuality {
     Stream = 0,

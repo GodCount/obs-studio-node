@@ -439,7 +439,7 @@ var ERecordingFormat;
     ERecordingFormat["MOV"] = "mov";
     ERecordingFormat["MKV"] = "mkv";
     ERecordingFormat["TS"] = "ts";
-    ERecordingFormat["M3M8"] = "m3m8";
+    ERecordingFormat["M3U8"] = "m3u8";
 })(ERecordingFormat = exports.ERecordingFormat || (exports.ERecordingFormat = {}));
 var ERecordingQuality;
 (function (ERecordingQuality) {
