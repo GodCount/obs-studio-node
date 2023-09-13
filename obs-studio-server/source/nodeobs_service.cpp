@@ -3201,6 +3201,7 @@ void OsnScreenshot::Save() {
 
 	th = std::thread([this] { MuxAndFinish(); });
 	delete screenshot;
+	screenshot = nullptr;
 }
 
 void OsnScreenshot::MuxAndFinish() {
