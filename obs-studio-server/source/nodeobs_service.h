@@ -127,8 +127,7 @@ public:
 	std::string path;
 	bool success = false;
 	std::string message_error;
-	uint8_t *data;
-	uint32_t linesize;
+	std::vector<uint8_t> data;
 	uint32_t cx;
 	uint32_t cy;
 	std::thread th;

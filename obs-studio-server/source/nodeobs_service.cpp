@@ -26,7 +26,7 @@
 #include "shared.hpp"
 #include "utility.hpp"
 #include <osn-video.hpp>
-
+#include <fstream>
 #ifdef __APPLE__
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -34,13 +34,6 @@
 #endif
 
 
-
-//extern "C" {
-//#include <libavcodec/avcodec.h>
-//#include <libavformat/avformat.h>
-//#include <libavutil/imgutils.h>
-//#include <libswscale/swscale.h>
-//}
 
 
 std::vector<obs_output_t *> streamingOutput = {nullptr, nullptr};
@@ -3170,9 +3163,16 @@ void OsnScreenshot::Copy() {
 	uint32_t videoLinesize = 0;
 
 	if (gs_stagesurface_map(stagesurf, &videoData, &videoLinesize)) {
-		linesize = videoLinesize;
-		data = (uint8_t *) bzalloc((cx + 32) * cy * 4);
-		memcpy(data, videoData, videoLinesize * cy);
+
+		const uint32_t linesize = cx * 4;
+		data.reserve(cx * cy * 4);
+		for (uint32_t y = 0; y < cy; y++) {
+			const uint8_t *const line = videoData + (y * videoLinesize);
+			data.insert(data.end(), line, line + linesize);
+		}
+
+		// data = (uint8_t *) bzalloc((cx + 32) * cy * 4);
+		// memcpy(data, videoData, videoLinesize * cy);
 		gs_stagesurface_unmap(stagesurf);
 	}
 }
@@ -3205,128 +3205,14 @@ void OsnScreenshot::Save() {
 }
 
 void OsnScreenshot::MuxAndFinish() {
-
-
-	FILE *of = fopen(path.c_str(), "wb");
-	if (of != NULL) {
-		fwrite(data, 1, linesize * cy, of);
-		fclose(of);
-		success = true;
-		return;
-	}
-
-
-	//const char *destination = path.c_str();
-	//uint8_t *image_data_ptr = data;
-	//uint32_t image_data_linesize = linesize;
-	//uint32_t width = cx;
-	//uint32_t height = cy;
-
-//	int ret;
-//	AVFrame *frame;
-//	AVPacket pkt;
-//
-//	if (image_data_ptr == NULL)
-//		goto err_no_image_data;
-//
-//	const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_PNG);
-//	if (codec == NULL)
-//		goto err_png_codec_not_found;
-//
-//	AVCodecContext *codec_context = avcodec_alloc_context3(codec);
-//	if (codec_context == NULL)
-//		goto err_png_encoder_context_alloc;
-//
-//	codec_context->bit_rate = 400000;
-//	codec_context->width = width;
-//	codec_context->height = height;
-//	codec_context->pix_fmt = AV_PIX_FMT_RGBA;
-//	codec_context->time_base = AVRational{1, 25};
-//
-//
-//	if (avcodec_open2(codec_context, codec, NULL) != 0)
-//		goto err_png_encoder_open;
-//
-//	frame = av_frame_alloc();
-//	if (frame == NULL)
-//		goto err_av_frame_alloc;
-//
-//	frame->format = codec_context->pix_fmt;
-//	frame->width = width;
-//	frame->height = height;
-//
-//	ret = av_image_alloc(frame->data, frame->linesize, codec_context->width, codec_context->height, codec_context->pix_fmt, 4);
-//	if (ret < 0)
-//		goto err_av_image_alloc;
-//
-//	av_init_packet(&pkt);
-//	pkt.data = NULL;
-//	pkt.size = 0;
-//
-//	for (int y = 0; y < height; ++y)
-//		memcpy(frame->data[0] + y * width * 4, image_data_ptr + y * image_data_linesize, width * 4);
-//	frame->pts = 1;
-//
-//#if LIBAVFORMAT_VERSION_INT < AV_VERSION_INT(57, 40, 101)
-//	int got_output = 0;
-//	ret = avcodec_encode_video2(codec_context, &pkt, frame, &got_output);
-//	if (ret == 0 && got_output) {
-//		FILE *of = fopen(destination, "wb");
-//		if (of != NULL) {
-//			fwrite(pkt.data, 1, pkt.size, of);
-//			fclose(of);
-//			success = true;
-//		}
-//		av_free_packet(&pkt);
-//	}
-//#else
-//	ret = avcodec_send_frame(codec_context, frame);
-//	if (ret < 0)
-//		goto err_av_image_alloc;
-//	ret = avcodec_receive_packet(codec_context, &pkt);
-//	if (ret < 0 || ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-//		goto err_av_image_alloc;
-//	} else {
-//		FILE *of = fopen(destination, "wb");
-//		if (of != NULL) {
-//			fwrite(pkt.data, 1, pkt.size, of);
-//			fclose(of);
-//			success = true;
-//		}
-//		av_packet_unref(&pkt);
-//	}
-//#endif
-//
-//	av_freep(frame->data);
-//
-//err_av_image_alloc:
-//	// Failed allocating image data buffer
-//	av_frame_free(&frame);
-//	frame = NULL;
-//	message_error = "Failed allocating image data buffer";
-//
-//err_av_frame_alloc:
-//	// Failed allocating frame
-//	avcodec_close(codec_context);
-//	message_error = "Failed allocating frame";
-//
-//err_png_encoder_open:
-//	// Failed opening PNG encoder
-//	avcodec_free_context(&codec_context);
-//	codec_context = NULL;
-//	message_error = "Failed opening PNG encoder";
-//
-//err_png_encoder_context_alloc:
-//	// failed allocating PNG encoder context
-//	// no need to free AVCodec* codec
-//	message_error = "failed allocating PNG encoder context, no need to free AVCodec* codec";
-//err_png_codec_not_found:
-//	// PNG encoder not found
-//	message_error = "NG encoder not found";
-//err_no_image_data:
-//	// image_data_ptr == NULL
-//	message_error = "image data not found";
-
+    std::ofstream file(path.c_str(), std::ios::binary);
+    if (file.is_open()) {
+        file.write(reinterpret_cast<const char*>(data.data()), data.size());
+        file.close();
+        success = true;
+    } else {
+        message_error = "Unable to write files!";
+    }
 }
 
 #define STAGE_SCREENSHOT 0
